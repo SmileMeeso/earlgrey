@@ -1,0 +1,660 @@
+//v1
+
+/************************** 정의서 read 함수 **************************/
+//passedSheetID로 받은 정의서를 읽어서 [query, state, poc_clf, os_name, page_id, action_id, body(JSON), rule_id, timeStamp] 정보를 array로 리턴
+function readEachSheet(passedSpreadSheetID, passedSheetID, passedTime, pageIDForModule, pocForModule, osnameForModule) {
+  var targetSpreadSheetID = passedSpreadSheetID;
+  var targetSheet = passedSheetID;
+  var sheetNameForModule = targetSheet.getName();
+  var lastRow = targetSheet.getLastRow();
+  var lastColumn = targetSheet.getLastColumn();
+  var content = targetSheet.getRange(1, 1, lastRow, lastColumn).getValues();
+  var returnArray = []; //[[state, poc_clf, os_name, page_id, action_id, body(JSON), rule_id, timeStamp]]
+  var timeStamp = passedTime;
+  
+  //오류 핸들링은 if분기로 <-- 나중에 추가
+  /************************** 페이지 속성 핸들링 **************************/
+  var pageID = "";
+  var poc_clf = [];
+  var os_name = [];
+  
+  //모듈인 경우와 아닌 경우로 분기
+  var counterForArrtibute = content[4].length;
+  if(!content[0][0].match(/module 정의서/)){
+    //page_id
+    if(content[2][1] != ""){
+      pageID = content[2][1];
+    }else{
+      //page_id가 없으면 오류 발생(나중)
+      pageID = "blank";
+    }
+    
+    //poc_clf(mw, app)
+    //os_name('', iOS, Android)
+    //시트 이름에 따라 POC 분기를 다르게 (나중)
+    for(var p = 1; p < counterForArrtibute; p++){
+      if(content[4][p] != ""){
+        if(content[4][p] == 'MW'){
+          poc_clf.push('mw');
+          os_name.push('');
+        }else if(content[4][p] == 'APP(Android)'){
+          poc_clf.push('app');
+          os_name.push('Android');
+        }else if(content[4][p] == 'APP(iOS)'){
+          poc_clf.push('app');
+          os_name.push('iOS');
+        }else if(content[4][p] == 'PC'){
+          poc_clf.push('pc');
+          os_name.push('');
+        }else{
+          //POC구분 오류
+          poc_clf.push('');
+          os_name.push('');
+        }
+      }else if(content[4][p] == ""){
+        //빈 칸 여부 핸들링(나중)
+        break;
+      }
+    }
+  }else if(content[0][0].match(/module 정의서/)){
+    if(pageIDForModule && pocForModule){
+      //재귀함수 호출인 경우
+      pageID = pageIDForModule;
+      poc_clf.push(pocForModule);
+      os_name.push(osnameForModule);
+    }else{
+      //module 정의서를 parameter로 받은 경우
+      return 1;
+    }
+  }
+    
+  /************************* action 핸들링 ***************************/
+  var bodyStartPoint = 0;
+  //body인덱스 조정
+  for(var i = 0; i < content[13].length; i++){
+    if(content[13][i].match(/body/)){
+      bodyStartPoint = i;
+      break;
+    }
+  }
+  if(bodyStartPoint == 0){
+    //bodyStartPoint 값이 0이면 오류 발생(나중)
+  }
+  
+  var counterForMapping = lastColumn - bodyStartPoint; //잘린 배열 길이
+  var counterForSeparatingPOC = poc_clf.length;
+  var temp = [];
+  var arrLength = 0;
+  
+  //배열 생성
+  for(var q = 0; q < counterForSeparatingPOC; q++){
+    for(var j = 15; j < lastRow; j++){
+      //2차원 배열
+      arrLength = returnArray.length;
+      returnArray[arrLength] = [];
+      temp[arrLength] = [];
+      
+      //state
+      if(content[j][0] == '서비스중' || '삭제' || '추가' || '수정'){
+        returnArray[arrLength][0] = content[j][0];
+      }else{
+        //state오류
+        returnArray[arrLength][0] = content[j][0];
+      }
+      //poc_clf
+      returnArray[arrLength][1] = poc_clf[q];
+      
+      //os_name
+      returnArray[arrLength][2] = os_name[q];
+      
+      //page_id
+      returnArray[arrLength][3] = pageID;
+      
+      //actionID
+      if(content[j][2] != ''){
+        //page_show, dom_content_loaded는 따로 핸들링
+        if((content[j][2] != 'page_show') && (content[j][2] != 'dom_content_loaded')){
+          //구성 요소 중 비어있는 부분 핸들링
+          if((content[j][2] != '') && (content[j][3] != '') && (content[j][4] != '')){
+            returnArray[arrLength][4] = content[j][2] + "." + content[j][3] + "." + content[j][4];
+          }else{
+            //actionID 오류
+            returnArray[arrLength][4] = content[j][2] + "." + content[j][3] + "." + content[j][4];
+          }
+        }else if((content[j][2] == 'page_show') || (content[j][2] == 'dom_content_loaded')){
+          returnArray[arrLength][4] = content[j][2];
+        }
+      }else if(content[j][2] == ''){
+        if(content[j+1]){
+          //빈 열 오류 방지를 위함
+          if(content[j+1][2] == ''){
+            //action_id 두 줄 누락
+            returnArray.pop();
+            break;
+          }
+        }else if(content[j][0] != ''){
+          //action_id 한 줄 누락(오류 행)
+          returnArray[arrLength][4] = "err";
+        }else{
+          returnArray[arrLength][4] = "err";
+        }
+      }
+      content[j].slice(bodyStartPoint, lastColumn).map(function(obj, idx){
+        //body(JSON)
+        if(obj != ''){
+          temp[arrLength].push("\""+obj+"\""); //2차 배열 인덱스 수정
+        }
+        if(idx == counterForMapping - 1){ //-1 해야하는지 아닌지 모르겠어...  <-- ㅋㅋㅋㅋ 웃고감니다
+          returnArray[arrLength][5] = "{\"body\":[" + temp[arrLength].join(',') + "]}";
+          //query
+          /*returnArray[arrLength].unshift("union all select '" 
+                                         + targetSpreadSheetID + "' as rule_id, '" 
+                                         + timeStamp + "' as collect_time, '" 
+                                         + returnArray[arrLength][0] + "' as state, '" 
+                                         + returnArray[arrLength][1] + "' as poc_clf, '" 
+                                         + returnArray[arrLength][2] + "' as os_name, '" 
+                                         + returnArray[arrLength][3] + "' as page_id, '" 
+                                         + returnArray[arrLength][4] + "' as action_id, '" 
+                                         + returnArray[arrLength][5] + "' as body");*/
+        }
+        return obj;
+      }).filter(function(x){
+        //body array 사이에 빈 칸이 있는 경우 핸들링
+        return x != '';
+      });
+      //일단 임시로 대충 추가.....
+      //rule_id
+      returnArray[arrLength].unshift(targetSpreadSheetID);
+      //time
+      returnArray[arrLength].unshift(timeStamp);
+        
+      //body 중복 제거(나중)
+      //returnArray[arrLength] = returnArray[arrLength].concat(content[j].slice(bodyStartPoint, lastColumn));
+      
+      /************************************************/
+      if(returnArray[arrLength - 1] == undefined){
+        returnArray[arrLength - 1] = [sheetNameForModule, "error", sheetNameForModule, '', '', '', '', ''];
+      }
+      /************************************************/
+    }
+    if(content[11][1] != ''){
+      if(content[11][1].match(/https/)){
+        //캐시에 있는 시트일 경우 캐시 로드(나중)
+        //캐시에 없는 시트일 경우 searchSheet 시트 로드(나중)
+        var ModuleSpreadSheetID = /spreadsheets\/d\/([a-zA-Z0-9-_]+)/.exec(content[11][1].toString())[1]; //정규식 캡처 방식이라 return이 array임. return이 string으로 되게 수정할 예정
+        var ModuleSheetID =  /gid=([0-9]+)/.exec(content[11][1].toString())[1]; //정규식 캡처 방식이라 return이 array임. return이 string으로 되게 수정할 예정
+        var ModuleSpreadSheet = SpreadsheetApp.openById(ModuleSpreadSheetID);
+        var ModuleSheet = searchSheet(ModuleSpreadSheet, ModuleSheetID);
+        returnArray = returnArray.concat(readEachSheet(ModuleSpreadSheetID, ModuleSheet, timeStamp, pageID, poc_clf[q], os_name[q]));
+      }
+    }
+  }
+  return returnArray;
+  //값 중 하나라도 빈 부분이 있으면 오류 flag나 로그를 위한 오류 메세지나 NULL 리턴(나중)
+}
+/************************** array를 검증하는 함수 **************************/
+//배열을 받아 정보를 로직에 따라 검증
+//로직에 맞지 않는 경우 log를 작성하고 1을 반환
+function verificationArray(targetArray){
+  //[[query, state, poc_clf, os_name, page_id, action_id, body(JSON)]]
+}
+
+/************************** 로그를 작성하는 함수 **************************/
+//오류 로그를 작성하는 함수
+//스텝별로 로그 작성
+function logForVerification(msg){
+}
+
+/************************** 캐시 search 함수 **************************/
+//(현재)module 정의서 링크에서 추출한 SheetID(pSheetID)를 가지는 sheet를 parameter로 받은 spreadsheet(pSpreadSheet)에서 찾는 함수
+//(수정)캐시에서 시트를 검색하고 캐시에 시트가 있으면 해당 시트 내용을 리턴, 없으면 SheetID로 Spreadsheet에서 sheet를 검색하여 리턴.
+function searchSheet(pSpreadSheet, pSheetID){
+  //캐시에 시트를 넣는 것으로 변경할 예정
+  var Sheets = pSpreadSheet.getSheets();
+  var SheetID = pSheetID;
+  
+  var SheetsLength = Sheets.length;
+  for(var kk = 0; kk < SheetsLength; kk++){
+    if(SheetID == Sheets[kk].getSheetId()){
+      return Sheets[kk];
+    }
+  }
+}
+
+//v2
+/************************** 정의서 검증 함수 **************************/
+//오류메세지는 정말 대략적인 정보만 적었음
+//passedSheet로 받은 정의서를 읽어서 정의서 정보 또는 오류 정보를 array로 리턴
+//함수에서 생성된 배열을 verificationArray함수에서 검사 
+//오류 유무에 따라 함수가 return하는 결과값이 달라짐
+
+//오류는 verificationArray에서 핸들링하나 보다 명확한 오류 메세지를 출력하기 위해 일부 오류는 예외로 지정하여 readEachSheet 함수에서 직접 핸들링
+// 1) lastRow와 lastColumn이 기준 미달인 경우
+// 2) body 시작 기준점을 찾을 수 없을 경우
+// 3) 재귀함수로 모듈정의서를 받지 않고 main함수에서 직접 모듈정의서를 parameter로 받은 경우
+
+//poc_clf 추가 유연하게 대처 가능하도록 poc_clf 핸들링 function이나 객체로 빼서 처리
+function readEachSheet_v2(passedSpreadSheetID, passedSheet, passedTime, pocForModule){//main에서 받는 parameter은 3개
+  //10초
+  var spreadSheetID = passedSpreadSheetID;
+  var targetSheet = passedSheet;
+  var timeStamp = passedTime;
+  
+  var sheetID = targetSheet.getSheetId();
+  var lastRow = targetSheet.getLastRow();
+  var lastColumn = targetSheet.getLastColumn();
+  
+  //lastRow와 lastColumn을 가져올 수 없는 경우 오류 캐치
+  
+  //00일 때 exception 추가
+  //
+  try{
+    var content = targetSheet.getRange(1, 1, lastRow, lastColumn).getValues();
+  }catch(e){
+    return {errorList : [["https://docs.google.com/spreadsheets/d/" + spreadSheetID + "/edit#gid=" + sheetID],["  [system] 행과 열 정보를 읽어올 수 없습니다."]]};
+  }
+  
+  var ObjectForExamination = {
+    PageAttribute : [], 
+    BodyAttribute : [],
+    SpreadSheetID : spreadSheetID,
+    SheetID : sheetID,
+    TimeStamp : timeStamp
+  } //{PageAttribute : [page_id, [poc_clf], [os_name]], BodyAttribute : [[state, action_id, body(JSON)]], SpreadSheetID : spreadSheetID, SheetID : sheetID, TimeStamp : timeStamp}
+  var returnArray = [];
+  
+  //content object 처리
+  
+  //오류 핸들링은 if분기로 검증 후 배열에 '행 번호'로 저장, 배열에 저장된 오류를 verificationArray에서 검증
+  //오류시 flag on, 마지막까지 flag가 off인 경우 검증 로직 건너뜀. (attri 따로, body 따로)(나중)
+  /************************** PageAttribute 핸들링 **************************/
+  var counterForAttribute = content[4].length; //poc 구분 행, poc for loop시 사용 //스펠링 다름~~~~ 나중에 수정~~~
+  
+  //일반 정의서와 모듈 정의서로 분기
+  ObjectForExamination.PageAttribute[1] = [];
+  ObjectForExamination.PageAttribute[2] = [];
+  
+  //1. 일반 정의서인 경우
+  if(!content[0][0].match(/module 정의서/)){
+    //page_id
+    //페이지 ID 행에 값이 있는가만 검증, 틀린 값 여부는 검증하지 않음
+    if(content[2][1] != ""){
+      ObjectForExamination.PageAttribute[0] = content[2][1];
+    }else{
+      //page_id 없음 오류
+      ObjectForExamination.PageAttribute[0] = 3;
+    }
+    
+    //poc_clf
+    //os_name
+    //시트 이름에 따라 POC 분기를 다르게 (나중에)
+    for(var p = 1; p < counterForAttribute; p++){
+      if(content[4][p] != ""){
+        if(content[4][p] == 'MW'){
+          ObjectForExamination.PageAttribute[1].push('mw')
+          ObjectForExamination.PageAttribute[2].push('');
+        }else if(content[4][p] == 'APP(Android)'){
+          ObjectForExamination.PageAttribute[1].push('app');
+          ObjectForExamination.PageAttribute[2].push('Android');
+        }else if(content[4][p] == 'APP(iOS)'){
+          ObjectForExamination.PageAttribute[1].push('app');
+          ObjectForExamination.PageAttribute[2].push('iOS');
+        }else if(content[4][p] == 'PC'){
+          ObjectForExamination.PageAttribute[1].push('pc');
+          ObjectForExamination.PageAttribute[2].push('');
+        }else{
+          //POC구분 오류(MW, APP(iOS), APP(Android), PC <= 4개의 경우가 아니면 오류)
+          ObjectForExamination.PageAttribute[1].push(5);
+          ObjectForExamination.PageAttribute[2].push(5);
+        }
+      }else if(content[4][p] == ""){
+        //행에서 POC정보가 더는 없으면 loop 탈출
+        if(content[4][p+1]){
+          //poc_clf에 공란이 있는 경우
+          if(content[4][p+1] != ""){
+            ObjectForExamination.PageAttribute[1].push(5);
+            ObjectForExamination.PageAttribute[2].push(5);
+          }else{
+            //content[4] 범위를 넘어가는 경우가 없을 것 같아서 content[4] 행을 넘어가는 경우를 고려하지 않음.
+            //POC정보를 전부 추출 완료하면 for loop break
+            break;
+          }
+        }else if(content[4][p+1] == ''){
+          if(p == 1){
+            //poc_clf 정보가 아예 없는 경우
+            ObjectForExamination.PageAttribute[1].push(5);
+            ObjectForExamination.PageAttribute[2].push(5);
+            break;
+          }
+        }
+      }
+    }
+  //2. 모듈정의서인 경우
+  }else if(content[0][0].match(/module 정의서/)){ 
+    if(pocForModule){ //재귀함수 호출인 경우 poc_clf 정보를 parameter에서 받는다
+      //page_id
+      //모듈의 경우 page_id 검증은 생략
+      ObjectForExamination.PageAttribute[0] = 'module';
+      
+      //일반 정의서의 POC와 모듈정의서의 POC가 다른 경우가 있음. 여기서 해당 경우 핸들링(나중)
+      for(var p = 1; p < counterForAttribute; p++){
+        if(content[4][p] != ""){
+          if(content[4][p] == 'MW'){
+            ObjectForExamination.PageAttribute[1].push('mw')
+            ObjectForExamination.PageAttribute[2].push('');
+          }else if(content[4][p] == 'APP(Android)'){
+            ObjectForExamination.PageAttribute[1].push('app');
+            ObjectForExamination.PageAttribute[2].push('Android');
+          }else if(content[4][p] == 'APP(iOS)'){
+            ObjectForExamination.PageAttribute[1].push('app');
+            ObjectForExamination.PageAttribute[2].push('iOS');
+          }else if(content[4][p] == 'PC'){
+            ObjectForExamination.PageAttribute[1].push('pc');
+            ObjectForExamination.PageAttribute[2].push('');
+          }else{
+            //POC구분 오류(MW, APP(iOS), APP(Android), PC <= 4개의 경우가 아니면 오류)
+            ObjectForExamination.PageAttribute[1].push(5);
+            ObjectForExamination.PageAttribute[2].push(5);
+          }
+        }else if(content[4][p] == ""){
+          //행에서 POC정보가 더는 없으면 loop 탈출
+          if(content[4][p+1]){
+            //poc_clf에 공란이 있는 경우
+            if(content[4][p+1] != ""){
+              ObjectForExamination.PageAttribute[1].push(5);
+              ObjectForExamination.PageAttribute[2].push(5);
+            }else{
+              //POC정보를 전부 추출 완료하면 for loop break
+              break;
+            }
+          }else if(content[4][p+1] == ''){
+            if(p == 1){
+              //poc_clf 정보가 아예 없는 경우
+              ObjectForExamination.PageAttribute[1].push(5);
+              ObjectForExamination.PageAttribute[2].push(5);
+              break;
+            }
+          }
+        }//content[4] 범위를 넘어가는 경우가 없을 것 같아서 content[4] 행을 넘어가는 경우를 고려하지 않음.
+      }
+    }else{
+      //module 정의서를 parameter로 받은 경우
+      //별도의 검증이나 로그 없이 1을 리턴함.
+      return {errorList : [["모듈 정의서를 스킵합니다."]]}; //리턴 값 검토 (오류 메세지가 필요할까요..............)
+    }
+  }
+  
+  /************************* BodyArrtibute 핸들링 ***************************/
+  var bodyStartPoint = 0; //body값이 시작되는 열
+  var bodyDataStartRow = 0; //body 데이터 읽기가 시작되는 행
+  
+  //body인덱스 조정
+  for(var i = 0; i < content[13].length; i++){
+    if(content[13][i].match(/body/)){
+      bodyStartPoint = i;
+      bodyDataStartRow = 15;
+      break;
+    }
+  }
+  if(bodyStartPoint == 0){
+    //14열이 아닌 부분에 body 기준점이 있는 issue때문에 추가된 코드
+    //body 기준점이 없는 경우 그 다음 열을 검사함.
+    for(i = 0; i< content[14].length; i++){
+      if(typeof content[14][i] == 'string'){
+        if(content[14][i].match(/body/)){
+          bodyStartPoint = i;
+          bodyDataStartRow = 16;
+          break;
+        }
+      }
+    }
+    if(bodyStartPoint == 0){
+      //body 검사 이전에 걸리는 오류이므로 배열검사 실행 불가능
+      //body값 검사 없이 배열 생성 가능하지만 의미 없을 것 같아서 바로 오류메세지 리턴
+      return {errorList : [["https://docs.google.com/spreadsheets/d/" + spreadSheetID + "/edit#gid=" + sheetID],["  [system] body값의 기준점을 찾을 수 없습니다."]]}; //리턴 값 검토
+    }
+  }
+  
+  //임시 코드
+  if(bodyDataStartRow == 0){
+    bodyDataStartRow = 15;
+  }
+  
+  var counterForMapping = lastColumn - bodyStartPoint; //body값이 있는 표 부분만 추출하기 위함
+  var temp = [];
+  var arrLength = 0;
+  
+  for(var j = bodyDataStartRow; j < lastRow; j++){
+    //2차원 배열
+    arrLength = ObjectForExamination.BodyAttribute.length;
+    ObjectForExamination.BodyAttribute[arrLength] = [];
+    temp[arrLength] = [];
+        
+    //actionID, state
+    if(content[j][0] != ''){
+      //state
+      if(content[j][0] == '서비스중' || '삭제' || '추가' || '수정'){
+        ObjectForExamination.BodyAttribute[arrLength][0] = content[j][0];
+      }else{
+        //state오류
+        ObjectForExamination.BodyAttribute[arrLength][0] = j + 1;
+      }
+      
+      //action_id
+      //page_show, dom_content_loaded는 따로 핸들링
+      if((content[j][2] != 'page_show') && (content[j][2] != 'dom_content_loaded')){
+      //gesture, area, label을 합쳐 action_id 생성
+        if((content[j][2] != '') && (content[j][3] != '') && (content[j][4] != '')){
+          ObjectForExamination.BodyAttribute[arrLength][1] = content[j][2] + "." + content[j][3] + "." + content[j][4];
+        }else{
+          //gesture, area, label 중 하나라도 비어있으면 actionID 오류
+          ObjectForExamination.BodyAttribute[arrLength][1] = j + 1; //(오류)actionID 비어있는 오류
+        }
+        //page_show와 dom_content_loaded는 따로 핸들링
+      }else if((content[j][2] == 'page_show') || (content[j][2] == 'dom_content_loaded')){
+        //합칠 필요 없이 page_show나 dom_content_loaded를 그대로 배열에 저장
+        ObjectForExamination.BodyAttribute[arrLength][1] = content[j][2];
+      }
+    //빈 열 오류 방지를 위함
+    }else if(content[j][0] == ''){
+      if((content[j][2] != '') && (content[j][3] != '') && (content[j][4] != '')){
+        //state 없는 경우
+        ObjectForExamination.BodyAttribute[arrLength][0] = j + 1;
+        ObjectForExamination.BodyAttribute[arrLength][1] = content[j][2] + "." + content[j][3] + "." + content[j][4];
+      }else{
+        //state도 없고 action_id도 없는 경우
+        ObjectForExamination.BodyAttribute[arrLength][0] = j + 1;
+        ObjectForExamination.BodyAttribute[arrLength][1] = j + 1;
+      }
+      //두 줄 이상 행에 내용이 없는 경우 
+      if(content[j+1]){ 
+        //[j+1]에 대한 검사를 하지 않고 [j+1][2]를 호출하면 오류 발생하므로 검사해야함.
+        if(content[j+1][2] == ''){//content[j+1][2] == ''만 검증하게 됨.....
+          ObjectForExamination.BodyAttribute.pop(); //이전 행도 내용이 없고 이후 행도 내용이 없으므로 이전 행 삭제, 앞으로의 행에도 내용이 없을 것이므로 break for-loop
+          break;
+        }
+      }
+    }
+        
+    //body(JSON)
+    //body array도 생성 가능(억제)
+    //body중복 제거(나중)
+    content[j].slice(bodyStartPoint, lastColumn).map(function(obj, idx){
+      if(obj != ''){
+        temp[arrLength].push("\""+obj+"\"");
+      }
+      if(idx == counterForMapping - 1){
+        //body(JSON)
+        ObjectForExamination.BodyAttribute[arrLength][2] = "{body:[" + temp[arrLength].join(',') + "]}";        
+      }
+      return obj;
+    }).filter(function(x){
+      //body array 사이에 빈 칸이 있는 경우 핸들링
+      return x != '';
+    });
+      
+    //undefined 핸들링
+    if(returnArray[arrLength] == undefined){
+      //verificationArray(targetArray)에서 처리하기
+    }
+  }
+  
+  /************************* 모듈 포함 여부 검사 ***************************/
+  if(content[11][1] != ''){
+    //속성에 오류가 있는 경우 모듈정의서 처리 돌지 않음. poc와 os_name, page_id가 옳은 경우에만 모듈 정의서 처리를 돌림(나중)
+    if(content[11][1].match(/https/)){
+      var moduleSpreadSheetID = /spreadsheets\/d\/([a-zA-Z0-9-_]+)/.exec(content[11][1].toString())[1]; //정규식 캡처 방식이라 return이 array임
+      var moduleSheetID =  /gid=([0-9]+)/.exec(content[11][1].toString())[1]; //정규식 캡처 방식이라 return이 array임
+      
+      //module 서치 함수 호출
+      var moduleSpreadSheet = SpreadsheetApp.openById(moduleSpreadSheetID);
+      var moduleSpreadSheetName = moduleSpreadSheet.getName();
+      var moduleSheet = searchSheet(moduleSpreadSheet, moduleSheetID);
+      
+      //var moduleSheet = searchSheet(moduleSheetID); //캐시에 있는 시트인지 검사한 후 검사 결과에 따라 분기하는 함수
+      //재귀함수 호출 후 body만 저장
+      var objectForModuleBody = readEachSheet(moduleSpreadSheetID, moduleSheet, timeStamp, ObjectForExamination.PageAttribute[0]);
+      //module 정의서에 오류가 있을 경우 body를 합치지 않음
+      if(objectForModuleBody.processList){
+        ObjectForExamination.BodyAttribute = ObjectForExamination.BodyAttribute.concat(objectForModuleBody.processList);
+      }
+    }
+  }
+  return verificationArray(ObjectForExamination);
+}
+
+/************************** Object를 검사하는 함수 **************************/
+//Object를 받아 log 메세지 배열 생성 ← 오류 메세지는 여기서 핸들링 가능
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@시간 추가하고 싶은데 기준을 못정하겠당☆★☆★☆★
+//Object 내에 오류 정보가 있을 경우 오류 배열을 캐시에 저장하고 1을 반환
+//Object 내에 오류 정보가 없을 경우 배열을 생성하는 함수를 호출하여 배열을 생성한 후 배열을 반환
+//1안 : 오류가 난 시점에서 함수를 호출하여 로그를 작성한 후 main함수에 1 반환(X)
+//2안 : 멈추지 않고 시트를 끝까지 읽은 후 함수를 호출하여 로그를 작성한 수 main함수에 1 반환(O)
+//passedObject = {PageAttribute : [page_id, [poc_clf], [os_name]], BodyAttribute : [[state, action_id, body(JSON)]], SpreadSheetID : spreadSheetID, SheetID : sheetID, TimeStamp : timeStamp}
+function verificationArray(passedObject){
+  var targetObj = passedObject;
+  var SpreadSheetID = targetObj.SpreadSheetID;
+  var SheetID = targetObj.SheetID;
+  var SpreadSheetURL = "https://docs.google.com/spreadsheets/d/" + SpreadSheetID + "/edit#gid=" + SheetID;
+  var errorMsgArray = []; //오류 메세지를 저장
+  
+  /************************** PageAttribute검사 **************************/
+  //PageAttribute : [page_id, [poc_clf], [os_name]]
+  var poc_clfLength = targetObj.PageAttribute[1].length;
+  var pageAttributeArr=  targetObj.PageAttribute;
+
+  //page_id 검사
+  if(typeof pageAttributeArr[0] == 'number'){
+    errorMsgArray.push(["        page_id 오류 : "+ pageAttributeArr[0] + "번 행"]);
+  }
+  //poc_clf, os_name 검사
+  for(var tt = 0; tt < poc_clfLength; tt++){
+    if(typeof pageAttributeArr[1][tt] == 'number'){
+      errorMsgArray.push(["        poc_clf 오류 : "+ pageAttributeArr[1][tt] + "번 행"]); //poc는 행,열 컨트롤 가능할 것 같은뎅 (추가)
+    }
+  }
+  
+  /************************** BodyArrtibute검사 **************************/
+  //BodyAttribute : [[state, action_id, body(JSON)]]
+  var bodyLength = targetObj.BodyAttribute.length;
+  var bodyArrtibuteArr = targetObj.BodyAttribute;
+  var returnObject = {};
+  
+  for(var ww = 0; ww < bodyLength; ww++){
+    if(typeof bodyArrtibuteArr[ww][0] == 'number'){
+      errorMsgArray.push(["        status 오류: " + bodyArrtibuteArr[ww][0] + "번 행"]);
+    }
+    if(typeof bodyArrtibuteArr[ww][1] == 'number'){
+      errorMsgArray.push(["        action_id 오류 : " + bodyArrtibuteArr[ww][1] + "번 행"]);
+    }
+  }
+  
+  if(errorMsgArray.length == 0){
+    //오류가 없는 경우 함수를 호출하여 배열을 리턴
+    if(pageAttributeArr[0] == 'module'){
+      //모듈정의서인 경우 Object의 body만 리턴
+      returnObject.processList = targetObj.BodyAttribute;
+      
+      return returnObject;
+    }else{
+      //일반 정의서인 경우 전체 Object를 리턴
+      return arrayGenerator(targetObj);
+    }
+  //오류가 있는 경우 에러 메세지를 출력하고 1을 리턴
+  }else{
+    errorMsgArray.unshift(["  [system] 오류 갯수 : " + errorMsgArray.length]);
+    errorMsgArray.unshift(["--" + SpreadSheetURL + "시트의 오류 내용"]);
+    
+    returnObject.errorList = errorMsgArray;
+    
+    //오류가 있는 경우 오류 object을 리턴( {errorList : []} )
+    return returnObject;
+  }
+}
+
+/************************** Array를 생성하는 함수 **************************/
+//검사 완료된 Object를 받아 배열을 생성하는 함수
+//배열을 생성한 후 processList를 key로 갖는 Object를 리턴
+//passedObject = {PageAttribute : [page_id, [poc_clf], [os_name]], BodyAttribute : [[state, action_id, body(JSON)]], SpreadSheetID : spreadSheetID, SheetID : sheetID, TimeStamp : timeStamp}
+function arrayGenerator(passedObject){
+  var pageAttribute = passedObject.PageAttribute;
+  var bodyAttribute = passedObject.BodyAttribute;
+  var timeStamp = passedObject.TimeStamp;
+  var rule_id = passedObject.SpreadSheetID;
+  
+  var returnArray = [];
+  var returnObject = {};
+  
+  var pageID = pageAttribute[0];
+  var poc_clf = pageAttribute[1];
+  var os_name = pageAttribute[2];
+  
+  var pocCount = poc_clf.length;
+  var bodyCount = bodyAttribute.length;
+  var arrayLength = 0;
+  
+  for(var ee = 0; ee < pocCount; ee++){
+    for(var bb = 0; bb < bodyCount; bb++){
+      arrayLength = returnArray.length;
+      returnArray[arrayLength] = [];
+      
+      //배열 생성
+      returnArray[arrayLength][0] = timeStamp; //timeStamp
+      returnArray[arrayLength][1] = rule_id; //rule_id
+      returnArray[arrayLength][2] = bodyAttribute[bb][0]; //state
+      returnArray[arrayLength][3] = poc_clf[ee]; //poc_clf
+      returnArray[arrayLength][4] = os_name[ee]; //os_name
+      returnArray[arrayLength][5] = pageID; //page_id
+      returnArray[arrayLength][6] = bodyAttribute[bb][1]; //action_id
+      returnArray[arrayLength][7] = bodyAttribute[bb][2]; //body
+    }
+  }
+  returnObject.processList = returnArray;
+  
+  return returnObject;
+}
+
+/************************** 모듈 search 함수 **************************/
+//(현재)module 정의서 링크에서 추출한 SheetID(pSheetID)를 가지는 sheet를 parameter로 받은 spreadsheet(pSpreadSheet)에서 찾는 함수
+//스프레드 시트 ID를 받아 캐시에 있는지 검사, 캐시에 있는 경우 캐시에서 시트를 가져와 리턴, 없는 경우 시트를 읽어 리턴
+function searchSheet(pSpreadSheet, pSheetID){
+  //캐시에 시트를 넣는 것으로 변경할 예정
+  var Sheets = pSpreadSheet.getSheets();
+  var SheetID = pSheetID;
+  
+  var SheetsLength = Sheets.length;
+  for(var kk = 0; kk < SheetsLength; kk++){
+    if(SheetID == Sheets[kk].getSheetId()){
+      return Sheets[kk];
+    }
+  }
+}
+
+/************************** 시간함수 **************************/
+function getTime(type, number){
+
+}
+
+/************************** 모듈 search 함수 **************************/
+
+/************************** 오브젝트 생성 함수 **************************/
