@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script type="text/javascript" src="require.js"></script>
+</head>
+<body>
+    <!-- File Upload -->
+    <input name="logDataExcel" type="file" id="logDataUploader" onchange="handleFiles(this.files)"/>
+    <button id="logDataUploaderButton">upload</button>
+
+    <!-- For Google Login -->
+    <button id="authorize-button" style="display: none;">Authorize</button>
+    <button id="signout-button" style="display: none;">Sign Out</button>
+
+    <pre id="content"></pre>
+    <!-- Google Login End -->
+
+    <script>
+    /* For GoogleDrive */
+    var CLIENT_ID = '942521605911-9g96d31tdqcbiu4lblh24ulcomjhk09n.apps.googleusercontent.com';
+    var API_KEY = 'AIzaSyB2c6BnpxhpjmycZJjtqIJpa-FyKfaiIpU';
+    var DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+    var SCOPES = 'https://www.googleapis.com/auth/drive.metadata.readonly';
+
+    var authorizeButton = document.getElementById('authorize-button');
+    var signoutButton = document.getElementById('signout-button');
+
+    function handleClientLoad() {
+        gapi.load('client:auth2', initClient);
+    }
+
+    function initClient() {
+        gapi.client.init({
+            apiKey: API_KEY,
+            clientId: CLIENT_ID,
+            discoveryDocs: DISCOVERY_DOCS,
+            scope: SCOPES
+        }).then(function () {
+            // Listen for sign-in state changes.
+            gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
+
+            // Handle the initial sign-in state.
+            updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
+            authorizeButton.onclick = handleAuthClick;
+            signoutButton.onclick = handleSignoutClick;
+        });
+    }
+
+    function updateSigninStatus(isSignedIn) {
+        if (isSignedIn) {
+            authorizeButton.style.display = 'none';
+            signoutButton.style.display = 'block';
+        } else {
+            authorizeButton.style.display = 'block';
+            signoutButton.style.display = 'none';
+        }
+    }
+
+    function handleAuthClick(event) {
+        gapi.auth2.getAuthInstance().signIn();
+    }
+    function handleSignoutClick(event) {
+        gapi.auth2.getAuthInstance().signOut();
+    }
+
+    //for test message
+    function appendPre(message) {
+        var pre = document.getElementById('content');
+        var textContent = document.createTextNode(message + '\n');
+        pre.appendChild(textContent);
+    }
+    /* For GoogleDrive End */
+
+    /* Functions */
+    function initElement() {
+
+    }
+
+    var logDataUploader = document.getElementById("logDataUploader");
+    var logDataUploaderButton = document.getElementById("logDataUploaderButton");
+
+    logDataUploader.addEventListener("change", handleFiles, false); //Firefox OS specific Non-standard events
+    logDataUploaderButton.addEventListener("click", uploadLogDataFile, false); //Firefox OS specific Non-standard events
+
+    function handleFiles(){
+        console.log("파일 업로드 감지.");
+    }
+
+    //Upload log data
+    //logDataUploaderButton에 click으로 매핑됨
+    //로그 데이터 XML 파일을 받아 string으로 변환
+    function uploadLogDataFile(event){
+        console.log("uploadLogDataFile");
+        var logDataFile = document.getElementById("logDataUploader").files[0]; //read only one of files....
+
+        var reader = new FileReader();
+
+        reader.onloadend = function() { //readAsBinaryString 비동기처리가 필요해서...
+            console.log("파일 읽기가 완료 되었습니다."); //State : 2
+
+            var logData = reader.result;
+
+            analysisXMLFile(logData);
+        }
+
+        reader.readAsBinaryString(logDataFile);
+    }
+    //읽기 오류 등 추가
+
+    function analysisXMLFile(exXMLstring) {
+        //1. XML 파싱
+        var parser = new DOMParser();
+        var XMLstring = exXMLstring;
+
+        var logDataDoc = parser.parseFromString(XMLstring, "text/xml");
+
+        //2. DOC를 text only 배열로 변경 및 KEY Object 생성
+        //text only배열(contentArr) : 핸들링용
+        //INDEX배열(IndexArr) : 피버팅용 인덱스
+        //KEY 객체(KeyObject) : 정답지 search 및 채점 기준 기준 index
+
+        //1)변수 생성
+        //  (1)row 설정
+        var docRow = logDataDoc.getElementsByTagName("Row");
+        var docRowLength = docRow.length;
+
+        //  (2)INDEX 설정
+        var indexRow = docRow[0];
+        var indexRowCells= indexRow.getElementsByTagName("Cell");
+        var indexRowCellsLength = indexRowCells.length;
+
+        //  (3)KEY 설정
+        var keyIndexArr = ['page_id'];
+        var keyIndexPosition = []; //대응되는 key가 몇 번째 행에 있는지
+        var keyIndexArrLength = keyIndexArr.length;
+
+        //  (4)필요한 변수 초기화
+        var indexArr = []; //(ex)[page_id, bodys, action_id, ...]
+        var contentArr = []; // [][]
+        var KeyObject = {}; //{page_id : [aa, bb, cc, ...], action_id : [aa, bb, dd, ff, ..]}
+
+        //2)처리를 통해 Index 및 Object 생성
+        //  (1)for loop를 통해 INDEX 배열 채움 및 KeyIndexPosition 채움
+        for(var i = 0; i < indexRowCellsLength; i++){
+            indexArr[i] = indexRowCells[i].textContent;
+
+            if(keyIndexArr.indexOf(indexRowCells[i].textContent) > -1){
+                keyIndexPosition.push(i);
+            }
+        }
+        //key 찾을 수 없음 오류 추가
+
+        //  (2)text only 배열 생성
+        for(var j = 0; j < docRowLength; j++){
+            var docRowCells = docRow[j].getElementsByTagName("Cell");
+            var docRowCellsLength = docRowCells.length;
+
+            contentArr[j] = [];
+
+            for(var k = 0; k < docRowCellsLength; k++){
+                contentArr[j][k] = docRowCells[k].textContent;
+            }
+        }
+
+        //  (3) Key Object 생성 (--(2)와 합치고 싶었지만 코드가 안예뻐서 따로 뺌)
+        for(var q = 0; q <  keyIndexArrLength; q++){
+            var thisIndex = keyIndexArr[q];
+            var thisCol = keyIndexPosition[q];
+
+            var tempArr = [];
+
+            for(var qq = 1; qq < docRowLength; qq++){
+                //key값을 추출하기 위한 용도이므로 중복되는 것은 뺀다.
+                if(tempArr.indexOf(contentArr[qq][thisCol]) == -1) {
+                    tempArr.push(contentArr[qq][thisCol]);
+                }
+
+                if(docRowLength == qq + 1){
+                    KeyObject[thisIndex] = tempArr;
+                }
+            }
+        }
+
+        downloadLogDefFile(keyIndexArr);
+    }
+
+    //download Log data Dictionary is searched by key (key : page_id)
+    function downloadLogDefFile(key) {
+
+    }
+
+</script>
+
+<script async defer src="https://apis.google.com/js/api.js"
+        onload="this.onload=function(){};handleClientLoad()"
+        onreadystatechange="if (this.readyState === 'complete') this.onload()">
+</script>
+</body>
+</html>
