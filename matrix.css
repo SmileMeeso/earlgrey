@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 .dot-td {
     padding:0;
 }
@@ -7,4 +8,15 @@
     padding: 0;
     border: 1px solid #000000;
     text-align: center;
+=======
+.dot-td {
+    padding:0;
+}
+.dot-td {
+    height: 30px;
+    width: 30px;
+    padding: 0;
+    border: 1px solid #000000;
+    text-align: center;
+>>>>>>> eae5ab5ccadd4b1289930be48e4e7e31d7624d49
 }
