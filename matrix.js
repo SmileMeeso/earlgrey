@@ -22,12 +22,13 @@ function default_load() {
             dot_td.textContent = 0;
             dot_td.addEventListener("click", function() {
                 matrix_on(i, j);
-            })
+            });
 
             dot_tr.append(dot_td);
         }
         document.getElementById("dot-matrix-table-main").append(dot_tr);
     }
+    document.getElementById('dot-matrix-setting-reset').addEventListener("click", matrix_reset);
     document.getElementById('dot-matrix-setting-cross').addEventListener("click", set_check_cross);
     matrix_array_set();
 }
@@ -51,34 +52,45 @@ function matrix_on(col, row) {
 
 //매트리스 배열을 설정하는 함수
 function matrix_array_set() {
+    console.log('set');
     let cross_flag = check_cross();
 
     let dot_col_arr = [];
     let dot_row_arr = [];
 
+    let this_portA = [255, 255, 255, 255, 255, 255, 255, 255];
+    let this_portF = [0, 0, 0, 0, 0, 0, 0, 0];
+
     let trs = [].slice.call(document.getElementsByClassName('dot-tr'));
 
     for(let i = 0; i < dot_row; i++) {
-        let tds = [].slice.call(trs[i].getElementsByClassName('dot-td'));
-        let this_portA = 255;
-        let this_portF = 0;
+        let tds = [].slice.call(trs[i].getElementsByClassName('dot-td')).reverse();
+        let flag = false;
 
         for(let j = 0; j < dot_col; j++) {
             let td = tds[j];
 
             if(td.textContent == '0') {
-                this_portF = this_portF;
+                this_portF[j] = this_portF[j];
             } else {
-                this_portF = this_portF + Math.pow(2, j);
-                this_portA = 255 - Math.pow(2, i);
+                if(flag == false && this_portA[j] == 255) {
+                    this_portA[j] = 255 - Math.pow(2, j);
+                }
+                this_portF[j] = this_portF[j] + Math.pow(2, i);
             }
         }
-
-        dot_col_arr.push(this_portA);
-        dot_row_arr.push(this_portF);
     }
 
-    console.log(cross_flag);
+    for(let k = 0; k < dot_col; k++) {
+        let portA_str = padding(this_portA[k].toString(2),8).split('').reverse().join('');
+        this_portA[k] = parseInt(parseInt(portA_str, 2).toString(10));
+        //let portF_str = padding(this_portF[k].toString(2),8).split('').reverse().join('');
+        //this_portF[k] = parseInt(parseInt(portF_str, 2).toString(10));
+    }
+    dot_col_arr = this_portA;
+    dot_row_arr = this_portF;
+
+
     if(cross_flag) {
         dot_col_arr = set_cross(dot_col_arr);
     }
@@ -86,8 +98,44 @@ function matrix_array_set() {
     matrix_info_update(dot_col_arr, dot_row_arr);
 }
 
+function matrix_reset() {
+    let dot_tr;
+    let dot_td;
+
+    let new_table = document.createElement('table');
+    new_table.id = "dot-matrix-table-main";
+
+    let parent =  document.getElementById("dot-matrix-table-main");
+
+    while(parent.hasChildNodes()){
+        parent.removeChild(parent.firstChild);
+    }
+
+    for(let i = 0; i < dot_row; i++) {
+        dot_tr = document.createElement("tr");
+        dot_tr.id = 'dot-tr' + (i + 1).toString();
+        dot_tr.classList.add('dot-tr');
+
+        for(let j = 0; j < dot_col; j++) {
+            dot_td = document.createElement("td");
+            dot_td.id = 'dot-td' + (j + 1).toString();
+            dot_td.classList.add('dot-td');
+            dot_td.textContent = 0;
+            dot_td.addEventListener("click", function() {
+                matrix_on(i, j);
+            });
+
+            dot_tr.append(dot_td);
+        }
+        document.getElementById("dot-matrix-table-main").append(dot_tr);
+    }
+    
+    matrix_array_set();
+}
+
 //매트리스 정보를 업데이트하는 함수
 function matrix_info_update(col, row) {
+    console.log('update');
     let portA_arr = [];
     let portF_arr = [];
 
