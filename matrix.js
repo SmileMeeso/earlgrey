@@ -1,6 +1,6 @@
 //Does not support IE
 //영원히 지원 안하니까 람다식 범벅^^
-
+//함수 너무 많으니까 파일 나누고싶어요... 근데 귀찮아요....
 const dot_row = 8;
 const dot_col = 8;
 
@@ -8,8 +8,6 @@ const portA = 255;
 const portF = 0;
 
 function default_load() {
-    console.log('on load.');
-
     let dot_tr;
     let dot_td;
 
@@ -33,15 +31,55 @@ function default_load() {
     }
     document.getElementById('dot-matrix-setting-reset').addEventListener("click", matrix_reset);
     document.getElementById('dot-matrix-setting-cross').addEventListener("click", set_check_cross);
-    matrix_array_set();
+    setting_event_setter(); //체크박스 이벤트리스너 호출
+    matrix_array_set(); //portA,
+}
+
+//number-type-setting 라디오 버튼 이벤트 리스너 추가 함수
+function setting_event_setter(old = null) {
+    let array_old = document.querySelector("#port-setting-number-type .number-type-setting:checked");
+    console.log(array_old.value);
+    let arrays = document.getElementsByClassName('number-type-setting');
+    let original_old = (old == null) ? [] : old;
+    let arrays_length = arrays.length;
+
+    let true_idx;
+    let old_idx;
+
+    console.log(old);
+
+    for(let i = 0; i < arrays_length; i++) {
+        if(old != null) {
+            if(arrays[i].value == array_old.value) {
+                true_idx = i;
+            }
+            if(original_old[i].checked) {
+                old_idx = i;
+            }
+            arrays[i].parentNode.replaceChild(original_old[i],arrays[i]);
+
+            if(i == arrays_length - 1) {
+                arrays[old_idx].checked = false;
+                arrays[true_idx].checked = true;
+            }
+        } else {
+            original_old.push(arrays[i].cloneNode(true));
+        }
+    }
+
+    for(let i = 0; i < arrays.length; i++) {
+        arrays[i].addEventListener("change", function() {
+            matrix_info_number_type(array_old, arrays[i], original_old);
+        });
+    }
 }
 
 //매트리스를 클릭하면 실행되는 함수
 function matrix_on(col, row) {
-    console.log(col + ", " + row);
     let this_td = document.getElementById("dot-tr"+(col+1)).getElementsByClassName("dot-td")[parseInt(row)];
     let this_text = this_td.textContent;
 
+    //클릭시 0이랑 1 체인지
     if(this_text == '0') {
         document.getElementById("dot-tr"+(col+1)).getElementsByClassName("dot-td")[parseInt(row)].textContent = '1';
         matrix_color(col, row, 1);
@@ -50,12 +88,11 @@ function matrix_on(col, row) {
         matrix_color(col, row, 0);
     }
 
-    matrix_array_set();
+    matrix_array_set(); //클릭으로 인해 변경된 내용에 따라 매트릭스 배열 재설정
 }
 
 //매트리스 배열을 설정하는 함수
 function matrix_array_set() {
-    console.log('set');
     let cross_flag = check_cross();
 
     let dot_col_arr = [];
@@ -98,7 +135,7 @@ function matrix_array_set() {
         dot_col_arr = set_cross(dot_col_arr);
     }
 
-    matrix_info_update(dot_col_arr, dot_row_arr);
+    matrix_info_update(dot_col_arr, dot_row_arr); //프론트에 매트리스 배열 업데이트
 }
 
 function matrix_reset() {
@@ -138,7 +175,6 @@ function matrix_reset() {
 
 //매트리스 정보를 업데이트하는 함수
 function matrix_info_update(col, row) {
-    console.log('update');
     let portA_arr = [];
     let portF_arr = [];
 
@@ -227,25 +263,45 @@ function set_cross(arr) {
             }
         }
         arr[i] = parseInt(parseInt(temp_arr.join(''), 2).toString(10));
-
     }
     return arr;
 }
+
 //포트를 해당하는 숫자 형식으로 변경해주는 함수
-function
+function matrix_info_number_type(before, after, old) {
+    setting_event_setter(old);
+
+    let now_numbers = document.getElementById("dot-matrix-array-info-column-content").textContent.split(", ");
+    let number_type_arr = document.getElementById("port-setting-number-type").getElementsByClassName('number-type-setting');
+    let number_type_arr_length = number_type_arr.length;
+    let checked_arr = {};
+    let from, to;
+
+    from = before.value;
+    to = after.value;
+
+    console.log("from : " + from + ', to : ' + to);
+
+    document.getElementById("dot-matrix-array-info-column-content").textContent = convert_to(now_numbers, from, to).join(', ');
+}
 
 //10진수로 바꾸기, 16진수로 바꾸기, ...
+//number : 배열(숫자형, 문자형, 숫자 문자 혼합형), 숫자형, 문자형 가능
+//리턴은 숫자형으로만 이뤄진 배열 혹은 숫자형
 function convert_to(number, from, to) {
-  let converted = number;
+    let converted = number;
 
-  if (from == 2 && to == 10)
-  {
-    converted = parseInt(converted.toString(to));
-  }
-  else if (from == 2 && to== 16)
-  {
+    if(Array.isArray(converted)) {
+        converted = converted.map((x, idx, arr) => {
+            if(typeof(x) == "number") {return parseInt(converted.toString(to));}
+            else if(typeof(x) == "string") {return parseInt(parseInt(converted, from).toString(to));}
+            else throw new error("convertToExcept");
+        });
+    } else if (typeof(converted) == "number") {
+        converted = parseInt(converted.toString(to));
+    } else if (typeof(converted) == "string") {
+        converted = parseInt(parseInt(converted, from).toString(to));
+    }
 
-  }
-
-  return converted;
+    return converted;
 }
