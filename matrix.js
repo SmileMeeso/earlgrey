@@ -36,9 +36,9 @@ function default_load() {
 }
 
 //number-type-setting 라디오 버튼 이벤트 리스너 추가 함수
+//todo: 이벤트리스너 중첩 없애야함, 일단 동작에 문제는 없는데 윤리적으로 아주 문제가 있다고 본다
 function setting_event_setter(old = null) {
     let array_old = document.querySelector("#port-setting-number-type .number-type-setting:checked");
-    console.log(array_old.value);
     let arrays = document.getElementsByClassName('number-type-setting');
     let original_old = (old == null) ? [] : old;
     let arrays_length = arrays.length;
@@ -46,10 +46,8 @@ function setting_event_setter(old = null) {
     let true_idx;
     let old_idx;
 
-    console.log(old);
-
-    for(let i = 0; i < arrays_length; i++) {
-        if(old != null) {
+    if(old != null) {
+        for(let i = 0; i < arrays_length; i++) {
             if(arrays[i].value == array_old.value) {
                 true_idx = i;
             }
@@ -62,7 +60,9 @@ function setting_event_setter(old = null) {
                 arrays[old_idx].checked = false;
                 arrays[true_idx].checked = true;
             }
-        } else {
+        }
+    } else {
+        for(let i = 0; i < arrays_length; i++) {
             original_old.push(arrays[i].cloneNode(true));
         }
     }
